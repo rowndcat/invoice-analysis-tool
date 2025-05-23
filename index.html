@@ -113,7 +113,7 @@
 
         // State variables
         let selectedFile = null;
-        let isDragging = false; // Not strictly needed for JS state but good for context
+        // let isDragging = false; // Not strictly needed for JS state but good for context
         const webhookUrl = 'https://aikerrijames.app.n8n.cloud/webhook/9b85467d-a6f4-4ea1-86e3-3098141f3cc9';
 
         // Helper to show/hide elements
@@ -306,12 +306,31 @@
 
             try {
                 const response = await fetch(webhookUrl, { method: 'POST', body: formData });
+                
+                // Get response as text first
+                const responseText = await response.text();
+
                 if (!response.ok) {
-                    let errorText = `Error: ${response.status} ${response.statusText}`;
-                    try { const errorData = await response.json(); errorText = `Error ${response.status}: ${errorData.message || JSON.stringify(errorData)}`; } catch (e) { /* Ignore */ }
+                    let errorText = `Error: ${response.status} ${response.statusText}.`;
+                    if (responseText) { // Add response body to error if available
+                        errorText += ` Server response: ${responseText.substring(0, 200)}`; // Limit length
+                    }
                     throw new Error(errorText);
                 }
-                const responseData = await response.json();
+
+                if (!responseText) {
+                    console.error("Webhook response was empty.");
+                    throw new Error("Received an empty response from the analysis service.");
+                }
+
+                let responseData;
+                try {
+                    responseData = JSON.parse(responseText);
+                } catch (e) {
+                    console.error("Failed to parse JSON from response:", responseText, e);
+                    throw new Error(`Failed to parse analysis data. Raw response: ${responseText.substring(0, 200)}`);
+                }
+                
                 if (responseData && typeof responseData === 'object' && !Array.isArray(responseData) && typeof responseData.output === 'string') {
                     const parsed = parseInvoiceOutput(responseData.output);
                     displayResults(parsed);
@@ -375,7 +394,7 @@
                 show(sectionsReviewContainer);
             } else {
                 hide(sectionsReviewContainer);
-                 if (!errorMsg && !parsedData.overallAssessment) { // If no error and no overall assessment, means no data
+                 if (!errorMsg && parsedData && !parsedData.overallAssessment) { // If no error and no overall assessment, means no data
                     sectionsDisplayArea.innerHTML = '<p class="text-slate-500">No specific sections found in the analysis.</p>';
                     show(sectionsReviewContainer);
                 }
